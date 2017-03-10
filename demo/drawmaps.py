@@ -1,4 +1,6 @@
-from omg import *
+#!/usr/bin/python
+#
+# from omg import *
 import sys
 import Image, ImageDraw
 
