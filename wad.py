@@ -251,7 +251,7 @@ class WAD:
         specifying a path to a file or a WadIO object."""
         if isinstance(source, WadIO):
             w = source
-        elif isinstance(source, str):
+        elif isinstance(source, str) or isinstance(source, unicode):
             assert os.path.exists(source)
             w = WadIO(source)
         else:
