@@ -1,4 +1,4 @@
-## Omgifol -- a Python library for Doom WAD files ##
+## Omgifol: a Python library for Doom WAD files ##
 
 Original author: Fredrik Johansson http://fredrikj.net
 
