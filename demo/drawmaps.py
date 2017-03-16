@@ -3,8 +3,17 @@
 # Incorporates code by Frans P. de Vries, 2016-04-26 
 # Incorporates code by Wintermute0110, 2017-03-11
 #
-#  720p -- 1280x720
-# 1080p -- 1920x1080
+# Image size table:
+#   1080p -- 1920 x 1080
+#    720p -- 1280 x  720
+#    576p --  720 x  576
+#    480p --  720 x  480
+#
+# Ideas for map drawing. This allows to have several maps per level for extrafanart
+#   a) Traditional way: plot linedefs and change colour for two sided/action linedefs
+#   b) Plot sectors (sectors with same height have same colour)
+#   c) Plot ssegs and ssectors
+#   d) Plot sector floor textures (same as automap in GLPrBoom+)
 #
 import sys
 import os
@@ -17,87 +26,216 @@ real_path  = os.path.realpath(__file__)
 currentdir = os.path.dirname(real_path)
 parentdir  = os.path.dirname(currentdir)
 moduledir  = os.path.dirname(parentdir)
-# print('real_path  "{0}"'.format(real_path))
-# print('currentdir "{0}"'.format(currentdir))
-# print('parentdir  "{0}"'.format(parentdir))
-# print('moduledir  "{0}"'.format(moduledir))
 sys.path.insert(0, moduledir) 
 from omg import *
 
 # -------------------------------------------------------------------------------------------------
 # Globals
 # -------------------------------------------------------------------------------------------------
-global_verbose = True
-border = 25
-scales = 0
-total = 0
+VERBOSE = True
+BORDER_PIXELS = 50
 
 # -------------------------------------------------------------------------------------------------
 # Functions
 # -------------------------------------------------------------------------------------------------
-def drawmap(wad, name, filename, width, format):
-    global scales, total
-    maxpixels = width
-    reqscale = 0
+def drawmap_fit(wad, name, filename, format, pxsize, pysize):
+    # Load map in editor
     edit = MapEditor(wad.maps[name])
     
-   # determine scale = map area unit / pixel
+    # Determine scale = map area unit / pixel
     xmin = min([v.x for v in edit.vertexes])
     xmax = max([v.x for v in edit.vertexes])
     ymin = min([-v.y for v in edit.vertexes])
     ymax = max([-v.y for v in edit.vertexes])
     xsize = xmax - xmin
     ysize = ymax - ymin
-    scale = (maxpixels-border*2) / float(max(xsize, ysize))
-
-    # tally for average scale or compare against requested scale
-    if reqscale == 0:
-        scales = scales + scale
-        total = total + 1
+    scale_x = (pxsize-BORDER_PIXELS*2) / float(xsize)
+    scale_y = (pysize-BORDER_PIXELS*2) / float(ysize)
+    if scale_x < scale_y:
+        scale = scale_x
+        xoffset = 0
+        yoffset = (pysize - int(ysize*scale)) / 2
     else:
-        if scale > 1.0 / reqscale:
-            scale = 1.0 / reqscale
+        scale = scale_y
+        xoffset = (pxsize - int(xsize*scale)) / 2
+        yoffset = 0
 
-    # convert all numbers to image space
-    xmax = int(xmax*scale); xmin = int(xmin*scale)
-    ymax = int(ymax*scale); ymin = int(ymin*scale)
-    xsize = int(xsize*scale) + border*2;
-    ysize = int(ysize*scale) + border*2;
-    for v in edit.vertexes:
-        v.x = v.x * scale; v.y = -v.y * scale 
+    if VERBOSE:
+        print('drawmap_fit() xmin  = {0}'.format(xmin))
+        print('drawmap_fit() xmax  = {0}'.format(xmax))
+        print('drawmap_fit() ymin  = {0}'.format(ymin))
+        print('drawmap_fit() ymax  = {0}'.format(ymax))
+        print('drawmap_fit() xsize = {0}'.format(xsize))
+        print('drawmap_fit() ysize = {0}'.format(ysize))
+        print('drawmap_fit() scale_x = {0}'.format(scale_x))
+        print('drawmap_fit() scale_y = {0}'.format(scale_y))
+        print('drawmap_fit() scale   = {0}'.format(scale))
+        print('drawmap_fit() pxsize = {0}'.format(pxsize))
+        print('drawmap_fit() pysize = {0}'.format(pysize))
 
     # --- Create image ---
-    if global_verbose:
-        print('drawmap() xsize = {0}'.format(xsize))
-        print('drawmap() ysize = {0}'.format(ysize))
-    im = Image.new('RGB', (xsize, ysize), (255,255,255))
+    im = Image.new('RGB', (pxsize, pysize), (255, 255, 255))
     draw = ImageDraw.Draw(im)
 
+    # --- Draw lines ---
     edit.linedefs.sort(lambda a, b: cmp(not a.two_sided, not b.two_sided))
-
     for line in edit.linedefs:
-         p1x = edit.vertexes[line.vx_a].x - xmin + border
-         p1y = edit.vertexes[line.vx_a].y - ymin + border
-         p2x = edit.vertexes[line.vx_b].x - xmin + border
-         p2y = edit.vertexes[line.vx_b].y - ymin + border
-         color = (0, 0, 0)
-         if line.two_sided: color = (144, 144, 144)
-         if line.action:    color = (220, 130, 50)
+        # >> Flip coordinates of Y axis
+        p1x =  ( edit.vertexes[line.vx_a].x - xmin) * scale + BORDER_PIXELS + xoffset
+        p1y =  (-edit.vertexes[line.vx_a].y - ymin) * scale + BORDER_PIXELS + yoffset
+        p2x =  ( edit.vertexes[line.vx_b].x - xmin) * scale + BORDER_PIXELS + xoffset
+        p2y =  (-edit.vertexes[line.vx_b].y - ymin) * scale + BORDER_PIXELS + yoffset
+        color = (0, 0, 0)
+        if   line.two_sided: color = (144, 144, 144)
+        elif line.action:    color = (220, 130, 50)
 
-         # draw several lines to simulate thickness 
-         draw.line((p1x, p1y, p2x, p2y), fill=color)
-         draw.line((p1x+1, p1y, p2x+1, p2y), fill=color)
-         draw.line((p1x-1, p1y, p2x-1, p2y), fill=color)
-         draw.line((p1x, p1y+1, p2x, p2y+1), fill=color)
-         draw.line((p1x, p1y-1, p2x, p2y-1), fill=color)
+        # >> Draw several lines to simulate thickness 
+        draw.line((p1x, p1y, p2x, p2y), fill = color)
+        draw.line((p1x+1, p1y, p2x+1, p2y), fill = color)
+        draw.line((p1x-1, p1y, p2x-1, p2y), fill = color)
+        draw.line((p1x, p1y+1, p2x, p2y+1), fill = color)
+        draw.line((p1x, p1y-1, p2x, p2y-1), fill = color)
 
-    # --- Draw scale (or grid or XY axis) ---
-    # scale_size = 654 * scale
-    # draw.line((10, 10, 10 + scale_size, 10), fill=(255, 255, 0))
+    # --- Draw things ---
+    RADIUS = 4
+    for thing in edit.things:
+        # >> Flip coordinates of Y axis
+        p1x =  ( thing.x - xmin) * scale + BORDER_PIXELS + xoffset
+        p1y =  (-thing.y - ymin) * scale + BORDER_PIXELS + yoffset
+        color = (0, 255, 0)
+        draw.ellipse((p1x-RADIUS, p1y-RADIUS, p1x+RADIUS, p1y+RADIUS), outline = color)
 
     # --- Draw XY axis ---
+    # NOTE ymin, ymax already inverted!!! This is a workaround
+    pxmin = (xmin - xmin) * scale + BORDER_PIXELS + xoffset
+    pxmax = (xmax - xmin) * scale + BORDER_PIXELS + xoffset
+    pymin = (ymin - ymin) * scale + BORDER_PIXELS + yoffset
+    pymax = (ymax - ymin) * scale + BORDER_PIXELS + yoffset
+    pxzero = (0 - xmin) * scale + BORDER_PIXELS + xoffset
+    pyzero = (0 - ymin) * scale + BORDER_PIXELS + yoffset
+    color = (255, 0, 0)
+    draw.line((pxmin, pyzero, pxmax, pyzero), fill = color)
+    draw.line((pxzero, pymin, pxzero, pymax), fill = color)
+
+    # --- Save image file ---
+    del draw
+    im.save(filename, format)
+
+def drawmap_width(wad, name, filename, format, pxwidth):
+    # Load map in editor
+    edit = MapEditor(wad.maps[name])
+    
+    # Determine scale = map area unit / pixel
+    xmin = min([v.x for v in edit.vertexes])
+    xmax = max([v.x for v in edit.vertexes])
+    ymin = min([-v.y for v in edit.vertexes])
+    ymax = max([-v.y for v in edit.vertexes])
+    xsize = xmax - xmin
+    ysize = ymax - ymin
+    scale = (pxwidth-BORDER_PIXELS*2) / float(max(xsize, ysize))
+    if VERBOSE:
+        print('drawmap_width() xmin  = {0}'.format(xmin))
+        print('drawmap_width() xmax  = {0}'.format(xmax))
+        print('drawmap_width() ymin  = {0}'.format(ymin))
+        print('drawmap_width() ymax  = {0}'.format(ymax))
+        print('drawmap_width() xsize = {0}'.format(xsize))
+        print('drawmap_width() ysize = {0}'.format(ysize))
+        print('drawmap_width() scale = {0}'.format(scale))
+
+    # Convert all numbers to image space
+    pxsize = int(xsize*scale) + BORDER_PIXELS*2;
+    pysize = int(ysize*scale) + BORDER_PIXELS*2;
+    if VERBOSE:
+        print('drawmap_width() pxsize = {0}'.format(pxsize))
+        print('drawmap_width() pysize = {0}'.format(pysize))
+
+    # --- Create image ---
+    im = Image.new('RGB', (pxsize, pysize), (255, 255, 255))
+    draw = ImageDraw.Draw(im)
+
+    # --- Draw lines ---
+    edit.linedefs.sort(lambda a, b: cmp(not a.two_sided, not b.two_sided))
+    for line in edit.linedefs:
+        # >> Flip coordinates of Y axis
+        p1x =  ( edit.vertexes[line.vx_a].x - xmin) * scale + BORDER_PIXELS
+        p1y =  (-edit.vertexes[line.vx_a].y - ymin) * scale + BORDER_PIXELS
+        p2x =  ( edit.vertexes[line.vx_b].x - xmin) * scale + BORDER_PIXELS
+        p2y =  (-edit.vertexes[line.vx_b].y - ymin) * scale + BORDER_PIXELS
+        color = (0, 0, 0)
+        if   line.two_sided: color = (144, 144, 144)
+        elif line.action:    color = (220, 130, 50)
+
+        # >> Draw several lines to simulate thickness 
+        draw.line((p1x, p1y, p2x, p2y), fill = color)
+        draw.line((p1x+1, p1y, p2x+1, p2y), fill = color)
+        draw.line((p1x-1, p1y, p2x-1, p2y), fill = color)
+        draw.line((p1x, p1y+1, p2x, p2y+1), fill = color)
+        draw.line((p1x, p1y-1, p2x, p2y-1), fill = color)
+
+    # --- Draw things ---
+    RADIUS = 5
+    for thing in edit.things:
+        # pprint.pprint(vars(thing))
+
+        # >> Flip coordinates of Y axis
+        p1x =  ( thing.x - xmin) * scale + BORDER_PIXELS
+        p1y =  (-thing.y - ymin) * scale + BORDER_PIXELS
+
+        # >> Change colour depending on flags
+        color = (0, 255, 0)
+        # if   thing.flags <= 2: color = (200,  0,   0)
+        # elif thing.flags <= 4: color = (0,  100, 100)
+        # elif thing.flags <= 8: color = (0,    0, 200)
+
+        # >> Draw circle centered on thing
+        draw.ellipse((p1x-RADIUS, p1y-RADIUS, p1x+RADIUS, p1y+RADIUS), outline = color)
+
+    # --- Draw XY axis ---
+    # NOTE ymin, ymax already inverted!!! This is a workaround
+    pxmin = (xmin - xmin) * scale + BORDER_PIXELS
+    pxmax = (xmax - xmin) * scale + BORDER_PIXELS
+    pymin = (ymin - ymin) * scale + BORDER_PIXELS
+    pymax = (ymax - ymin) * scale + BORDER_PIXELS
+    pxzero = (0 - xmin) * scale + BORDER_PIXELS
+    pyzero = (0 - ymin) * scale + BORDER_PIXELS
+    color = (255, 0, 0)
+    draw.line((pxmin, pyzero, pxmax, pyzero), fill = color)
+    draw.line((pxzero, pymin, pxzero, pymax), fill = color)
+
+    # --- Draw MAP bounding box ---
+    # color = (0, 0, 255)
+    # draw.line((pxmin, pymin, pxmin, pymax), fill = color) # left
+    # draw.line((pxmin, pymin, pxmax, pymin), fill = color) # bottom
+    # draw.line((pxmax, pymin, pxmax, pymax), fill = color) # right
+    # draw.line((pxmin, pymax, pxmax, pymax), fill = color) # top
+
+    # --- Draw grid ---
     # scale_size = 654 * scale
     # draw.line((10, 10, 10 + scale_size, 10), fill=(255, 0, 0))
+
+    # --- Draw scale on top-left corner ---
+    # A level must be contained within a 16384-unit radius as measured from its center point. 
+    # A---------B---------C   big gap 327 map units
+    # |         |         |   small gap 163 map units
+    # |         E         |   
+    # D                   F
+    #
+    A_px = (xmin - xmin) * scale + BORDER_PIXELS
+    A_py = (ymax - ymin) * scale + BORDER_PIXELS
+    B_px = (xmin + 163 - xmin) * scale + BORDER_PIXELS
+    B_py = (ymax - ymin) * scale + BORDER_PIXELS
+    C_px = (xmin + 327 - xmin) * scale + BORDER_PIXELS
+    C_py = (ymax - ymin) * scale + BORDER_PIXELS
+    D_px = (xmin - xmin) * scale + BORDER_PIXELS
+    D_py = (ymax - 48 - ymin) * scale + BORDER_PIXELS
+    F_px = (xmin + 327 - xmin) * scale + BORDER_PIXELS
+    F_py = (ymax - 48 - ymin) * scale + BORDER_PIXELS
+
+    color = (123, 104, 238)
+    draw.line((A_px, A_py, B_px, B_py), fill = color) # A -> B
+    draw.line((B_px, B_py, C_px, C_py), fill = color) # B -> C
+    draw.line((A_px, A_py, D_px, D_py), fill = color) # A -> D
+    draw.line((C_px, C_py, F_px, F_py), fill = color) # C -> F
 
     # --- Save image file ---
     del draw
@@ -107,15 +245,19 @@ def drawmap(wad, name, filename, width, format):
 # main ()
 # -------------------------------------------------------------------------------------------------
 if len(sys.argv) < 2:
-    print('Omgifol script: draw maps to image files')
+    print('Omgifol DEMO script: draw maps to image files')
     print('Draw all maps whose names match the given pattern (eg E?M4 or MAP*)')
     print('to image files of a given format (PNG, BMP, etc). width specifies the')
     print('desired width of the output images.\n')
-    print('Usage: drawmaps.py [-p pattern] [-w width [-f format] source.wad')
-    print('  -p pattern  Patterns may be "E?M?", "MAP01", "MAP*"')
-    print('              Defaults to all level (pattern "*")')
-    print('  -w width    Width in pixels. Defaults to 1920 (for a 1920x1080 image)')
+    print('Usage: drawmaps.py [options] source.wad\n')
+    print('  -p pattern  Patterns may be "E?M?", "MAP01", "MAP*". Defaults to all level (pattern "*")')
     print('  -f format   May be PNG, BMP, JPEG. Defaults to PNG')
+    print('  -w width    Width in pixels. Defaults to 1920 (for a 1920x1080 image)')
+    print('  -s size     Fits map on given image size. size may be 1080p, 720p, 576p, 480p')
+    print('  -things     Draws things on maps')
+    print('  -axis       Draws cartesian axis on maps')
+    print('  -scale      Draws a map scale on the upper right corner')
+
     sys.exit(1)
 
 # --- Parse arguments ---
@@ -128,8 +270,8 @@ width = 1920
 format = 'PNG'
 for o, a in opts:
     if   o == '-p': pattern = a
-    elif o == '-w': width = int(a)
     elif o == '-f': format = a
+    elif o == '-w': width = int(a)
     else:
         assert False, "Unhandled option"
 
@@ -140,5 +282,6 @@ inwad.from_file(wad_filename)
 for name in inwad.maps.find(pattern):
     filename = os.path.splitext(wad_filename)[0] + '_' + name + '.' + format.lower()
     print('Drawing map {0} on file "{1}"'.format(name, filename))
-    drawmap(inwad, name, filename, width, format)
+    # drawmap_width(inwad, name, filename, format, width)
+    drawmap_fit(inwad, name, filename, format, 1920, 1080)
 sys.exit(0)
