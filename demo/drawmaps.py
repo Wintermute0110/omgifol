@@ -36,7 +36,40 @@ VERBOSE = True
 BORDER_PIXELS = 50
 
 # -------------------------------------------------------------------------------------------------
-# Functions
+# Vars
+# -------------------------------------------------------------------------------------------------
+class BBox:
+    def __init__(self, left, right, bottom, top):
+        self.left   = left
+        self.right  = right
+        self.bottom = bottom
+        self.top    = top
+
+# Defines all variables necessary for a 2 dimensional linear transformation.
+class MapTransformation:
+    def __init__(self, left, right, bottom, top):
+        self.left   = left
+        self.right  = right
+        self.bottom = bottom
+        self.top    = top
+
+# -------------------------------------------------------------------------------------------------
+# Drawing utility functions
+# -------------------------------------------------------------------------------------------------
+def draw_things(edit, map_BBox, scale, draw):
+    RADIUS = 4
+    xmin = map_BBox.left
+    ymin = map_BBox.bottom
+    for thing in edit.things:
+        # >> Flip coordinates of Y axis
+        p1x =  ( thing.x - xmin) * scale + BORDER_PIXELS + xoffset
+        p1y =  (-thing.y - ymin) * scale + BORDER_PIXELS + yoffset
+        color = (0, 255, 0)
+        draw.ellipse((p1x-RADIUS, p1y-RADIUS, p1x+RADIUS, p1y+RADIUS), outline = color)
+
+
+# -------------------------------------------------------------------------------------------------
+# Top level map drawing functions
 # -------------------------------------------------------------------------------------------------
 def drawmap_fit(wad, name, filename, format, pxsize, pysize):
     # Load map in editor
@@ -47,6 +80,7 @@ def drawmap_fit(wad, name, filename, format, pxsize, pysize):
     xmax = max([v.x for v in edit.vertexes])
     ymin = min([-v.y for v in edit.vertexes])
     ymax = max([-v.y for v in edit.vertexes])
+    map_BBox = BBox(xmin, xmax, ymin, ymax)
     xsize = xmax - xmin
     ysize = ymax - ymin
     scale_x = (pxsize-BORDER_PIXELS*2) / float(xsize)
@@ -97,13 +131,7 @@ def drawmap_fit(wad, name, filename, format, pxsize, pysize):
         draw.line((p1x, p1y-1, p2x, p2y-1), fill = color)
 
     # --- Draw things ---
-    RADIUS = 4
-    for thing in edit.things:
-        # >> Flip coordinates of Y axis
-        p1x =  ( thing.x - xmin) * scale + BORDER_PIXELS + xoffset
-        p1y =  (-thing.y - ymin) * scale + BORDER_PIXELS + yoffset
-        color = (0, 255, 0)
-        draw.ellipse((p1x-RADIUS, p1y-RADIUS, p1x+RADIUS, p1y+RADIUS), outline = color)
+    draw_things(edit, map_BBox, scale, draw)
 
     # --- Draw XY axis ---
     # NOTE ymin, ymax already inverted!!! This is a workaround
