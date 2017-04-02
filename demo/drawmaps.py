@@ -10,10 +10,11 @@
 #    480p --  720 x  480
 #
 # Ideas for map drawing. This allows to have several maps per level for extrafanart
-#   a) Traditional way: plot linedefs and change colour for two sided/action linedefs
-#   b) Plot sectors (sectors with same height have same colour)
-#   c) Plot ssegs and ssectors
-#   d) Plot sector floor textures (same as automap in GLPrBoom+)
+#   a) LINEDEFS: plot linedefs and change colour for two sided/action linedefs
+#   b) SECTORS:  plot sectors (sectors with same height have same colour)
+#   c) SSECTORS: plot ssegs and ssectors
+#   d) TEXTURED: plot sector floor textures (same as automap in GLPrBoom+)
+#   e) VERTEXES: plot linedef vertices in one color and node builder-added vertices in another
 #
 import sys
 import os
@@ -72,26 +73,32 @@ def draw_things(edit, map_BBox, scale, draw):
 # Top level map drawing functions
 # -------------------------------------------------------------------------------------------------
 def drawmap_fit(wad, name, filename, format, pxsize, pysize):
-    # Load map in editor
+    if VERBOSE:
+        print('drawmap_fit() pxsize = {0}'.format(pxsize))
+        print('drawmap_fit() pysize = {0}'.format(pysize))
+
+    # --- Load map in editor ---
     edit = MapEditor(wad.maps[name])
     
-    # Determine scale = map area unit / pixel
+    # --- Determine scale = map area unit / pixel ---
     xmin = min([v.x for v in edit.vertexes])
     xmax = max([v.x for v in edit.vertexes])
-    ymin = min([-v.y for v in edit.vertexes])
-    ymax = max([-v.y for v in edit.vertexes])
+    ymin = min([v.y for v in edit.vertexes])
+    ymax = max([v.y for v in edit.vertexes])
     map_BBox = BBox(xmin, xmax, ymin, ymax)
-    xsize = xmax - xmin
-    ysize = ymax - ymin
+    xsize = map_BBox.right - map_BBox.left
+    ysize = map_BBox.top - map_BBox.bottom
     scale_x = (pxsize-BORDER_PIXELS*2) / float(xsize)
     scale_y = (pysize-BORDER_PIXELS*2) / float(ysize)
     if scale_x < scale_y:
         scale = scale_x
         xoffset = 0
-        yoffset = (pysize - int(ysize*scale)) / 2
+        # yoffset = (pysize - int(ysize*scale)) / 2
+        yoffset = 0
     else:
         scale = scale_y
-        xoffset = (pxsize - int(xsize*scale)) / 2
+        # xoffset = (pxsize - int(xsize*scale)) / 2
+        xoffset = 0
         yoffset = 0
 
     if VERBOSE:
@@ -104,8 +111,6 @@ def drawmap_fit(wad, name, filename, format, pxsize, pysize):
         print('drawmap_fit() scale_x = {0}'.format(scale_x))
         print('drawmap_fit() scale_y = {0}'.format(scale_y))
         print('drawmap_fit() scale   = {0}'.format(scale))
-        print('drawmap_fit() pxsize = {0}'.format(pxsize))
-        print('drawmap_fit() pysize = {0}'.format(pysize))
 
     # --- Create image ---
     im = Image.new('RGB', (pxsize, pysize), (255, 255, 255))
@@ -115,10 +120,12 @@ def drawmap_fit(wad, name, filename, format, pxsize, pysize):
     edit.linedefs.sort(lambda a, b: cmp(not a.two_sided, not b.two_sided))
     for line in edit.linedefs:
         # >> Flip coordinates of Y axis
-        p1x =  ( edit.vertexes[line.vx_a].x - xmin) * scale + BORDER_PIXELS + xoffset
-        p1y =  (-edit.vertexes[line.vx_a].y - ymin) * scale + BORDER_PIXELS + yoffset
-        p2x =  ( edit.vertexes[line.vx_b].x - xmin) * scale + BORDER_PIXELS + xoffset
-        p2y =  (-edit.vertexes[line.vx_b].y - ymin) * scale + BORDER_PIXELS + yoffset
+        p1x = (edit.vertexes[line.vx_a].x + xmin) * scale + BORDER_PIXELS + xoffset
+        p1y = (edit.vertexes[line.vx_a].y + ymin) * scale + BORDER_PIXELS + yoffset
+        p2x = (edit.vertexes[line.vx_b].x + xmin) * scale + BORDER_PIXELS + xoffset
+        p2y = (edit.vertexes[line.vx_b].y + ymin) * scale + BORDER_PIXELS + yoffset
+        p1y = -p1y
+        p2y = -p2y
         color = (0, 0, 0)
         if   line.two_sided: color = (144, 144, 144)
         elif line.action:    color = (220, 130, 50)
@@ -131,7 +138,7 @@ def drawmap_fit(wad, name, filename, format, pxsize, pysize):
         draw.line((p1x, p1y-1, p2x, p2y-1), fill = color)
 
     # --- Draw things ---
-    draw_things(edit, map_BBox, scale, draw)
+    # draw_things(edit, map_BBox, scale, draw)
 
     # --- Draw XY axis ---
     # NOTE ymin, ymax already inverted!!! This is a workaround
