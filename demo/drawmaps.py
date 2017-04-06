@@ -110,14 +110,14 @@ class LinearTransform:
 
 # See https://github.com/chocolate-doom/chocolate-doom/blob/sdl2-branch/src/doom/am_map.c
 class ColorScheme:
-    def __init__(self, back, wall, tswall, fdwall, cdwall, awall, thing):
-        self.BG     = back
-        self.WALL   = wall   # One sided linedef
-        self.TSWALL = tswall # Two sided linedef
-        self.FDWALL = fdwall # Two sided, floor level change
-        self.CDWALL = cdwall # Two sided, ceiling level change and same floor level
-        self.AWALL  = awall  # Action wall
-        self.THING  = thing  # Thing color
+    def __init__(self, back, wall, tswall, awall, fdwall, cdwall, thing):
+        self.BG      = back
+        self.WALL    = wall   # One sided linedef
+        self.TS_WALL = tswall # Two sided linedef
+        self.A_WALL  = awall  # Action wall
+        self.FD_WALL = fdwall # Two sided, floor level change
+        self.CD_WALL = cdwall # Two sided, ceiling level change and same floor level
+        self.THING   = thing  # Thing color
 
 CDoomWorld = ColorScheme(
     (255, 255, 255),
@@ -130,13 +130,13 @@ CDoomWorld = ColorScheme(
 )
 
 CClassic = ColorScheme(
-    (0, 0, 0),
-    (255, 0, 0),
-    (144, 144, 144),
-    (0, 255, 0),
-    (0, 0, 255),
-    (220, 130, 50),
-    (0, 255, 0)
+    (0, 0, 0),       # BACK black
+    (255, 0, 0),     # WALL red
+    (150, 150, 150), # TS_WALL grey
+    (255, 255, 255), # A_WALL white
+    (139, 82, 45),   # FD_WALL brown
+    (255, 255, 0),   # CD_WALL yellow
+    (220, 130, 50),  # THING green
 )
 
 # -------------------------------------------------------------------------------------------------
@@ -206,26 +206,64 @@ def drawmap_fit(wad, map_name, filename, format, map_type, px_size, py_size, csc
     draw = ImageDraw.Draw(im)
 
     # --- Draw XY axis ---
-    draw_axis(draw, LT, (200, 200, 200))
+    # draw_axis(draw, LT, (200, 200, 200))
 
     # --- Draw map scale ---
     draw_scale(draw, LT, (150, 150, 150))
 
     # --- Draw map ---
     if map_type == MAP_LINEDEFS:
-        # --- Draw lines ---
+        # --- sorts lines ---
         edit.linedefs.sort(lambda a, b: cmp(not a.two_sided, not b.two_sided))
-        for line in edit.linedefs:
-            (p1x, p1y) = LT.MapToScreen(edit.vertexes[line.vx_a].x, edit.vertexes[line.vx_a].y)
-            (p2x, p2y) = LT.MapToScreen(edit.vertexes[line.vx_b].x, edit.vertexes[line.vx_b].y)
 
-            color = cscheme.WALL
-            if   line.two_sided: color = cscheme.TSWALL
-            elif line.action:    color = cscheme.AWALL
+        # --- Draw lines ---
+        if False:
+            # >> Use DoomWiki colours and drawing algorithm
+            for line in edit.linedefs:
+                (p1x, p1y) = LT.MapToScreen(edit.vertexes[line.vx_a].x, edit.vertexes[line.vx_a].y)
+                (p2x, p2y) = LT.MapToScreen(edit.vertexes[line.vx_b].x, edit.vertexes[line.vx_b].y)
 
-            # >> Draw several lines to simulate thickness
-            # draw_line(draw, p1x, p1y, p2x, p2y, color)
-            draw_thick_line(draw, p1x, p1y, p2x, p2y, color)
+                color = cscheme.WALL
+                if   line.two_sided: color = cscheme.TS_WALL
+                elif line.action:    color = cscheme.A_WALL
+
+                # >> Draw several lines to simulate thickness
+                # draw_line(draw, p1x, p1y, p2x, p2y, color)
+                draw_thick_line(draw, p1x, p1y, p2x, p2y, color)
+        else:
+            # --- Create floorheight and ceilingheight for two-sided linedefs ---
+            for line in edit.linedefs:
+                # Skin one-sided linedefs
+                if line.back < 0: continue
+                front_sidedef = edit.sidedefs[line.front]
+                back_sidedef  = edit.sidedefs[line.back]
+                front_sector  = edit.sectors[front_sidedef.sector]
+                back_sector   = edit.sectors[back_sidedef.sector]
+                line.frontsector_floorheight   = front_sector.z_floor
+                line.frontsector_ceilingheight = front_sector.z_ceil
+                line.backsector_floorheight    = back_sector.z_floor
+                line.backsector_ceilingheight  = back_sector.z_ceil
+
+            # >> Use Vanilla Doom automap colours and drawing algortihm
+            # >> https://github.com/chocolate-doom/chocolate-doom/blob/sdl2-branch/src/doom/am_map.c#L1146
+            for line in edit.linedefs:
+                (p1x, p1y) = LT.MapToScreen(edit.vertexes[line.vx_a].x, edit.vertexes[line.vx_a].y)
+                (p2x, p2y) = LT.MapToScreen(edit.vertexes[line.vx_b].x, edit.vertexes[line.vx_b].y)
+
+                # >> Use same algorithm as AM_drawWalls(). cheating variable is true
+                # >> In vanilla secret walls have same colours as walls.
+                if line.back < 0:
+                    color = cscheme.WALL
+                elif line.backsector_floorheight != line.frontsector_floorheight:
+                    color = cscheme.FD_WALL
+                elif line.backsector_ceilingheight != line.frontsector_ceilingheight:
+                    color = cscheme.CD_WALL
+                else:
+                    color = cscheme.TS_WALL
+
+                # >> Draw several lines to simulate thickness
+                # draw_line(draw, p1x, p1y, p2x, p2y, color)
+                draw_thick_line(draw, p1x, p1y, p2x, p2y, color)
 
         # --- Draw things ---
         for thing in edit.things:
@@ -233,7 +271,7 @@ def drawmap_fit(wad, map_name, filename, format, map_type, px_size, py_size, csc
             # draw_thing(draw, p1x, p1y, thing.angle, cscheme.THING)
             color = (0, 255, 0)
             (px, py) = LT.MapToScreen(thing.x, thing.y)
-            draw.ellipse((px-RADIUS, py-RADIUS, px+RADIUS, py+RADIUS), outline = color)
+            # draw.ellipse((px-RADIUS, py-RADIUS, px+RADIUS, py+RADIUS), outline = color)
 
     elif map_type == MAP_VERTEXES:
         # --- Draw lines ---
@@ -271,6 +309,7 @@ def drawmap_fit(wad, map_name, filename, format, map_type, px_size, py_size, csc
 
     elif map_type == MAP_NODES:
         # --- Draw segs and ssectors ---
+        # NOT WORKING AT THE MOMENT!
         # Segs are only defined on linedefs and have implicit edges. I don't know how to
         # plot the implicit edges.
         # http://doom.wikia.com/wiki/Subsector
@@ -381,5 +420,4 @@ for name in inwad.maps.find(pattern):
     # drawmap_fit(inwad, name, fn_prefix + '_Sec_B' + fn_sufix, format, MAP_SECTORS, 1920, 1080, CClassic)
     # drawmap_fit(inwad, name, fn_prefix + '_Nodes_A' + fn_sufix, format, MAP_NODES, 1920, 1080, CDoomWorld)
     # drawmap_fit(inwad, name, fn_prefix + '_Nodes_B' + fn_sufix, format, MAP_NODES, 1920, 1080, CClassic)
-
 sys.exit(0)
