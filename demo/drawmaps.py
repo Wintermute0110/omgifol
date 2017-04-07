@@ -37,7 +37,7 @@ from omg import *
 # Globals
 # -------------------------------------------------------------------------------------------------
 VERBOSE = True
-BORDER_PERCENT = 5
+BORDER_PERCENT = 8
 
 MAP_LINEDEFS = 100
 MAP_SECTORS  = 200
@@ -135,7 +135,7 @@ CClassic = ColorScheme(
     (255, 0, 0),     # WALL red
     (150, 150, 150), # TS_WALL grey
     (255, 255, 255), # A_WALL white
-    (139, 82, 45),   # FD_WALL brown
+    (139, 92, 55),   # FD_WALL brown
     (255, 255, 0),   # CD_WALL yellow
     (220, 130, 50),  # THING green
 )
@@ -159,6 +159,31 @@ def draw_axis(draw, LT, color):
     draw.line((pxzero, 0, pxzero, LT.py_size), fill = color)
 
 #
+# Draw the grid every 128 map units with origin at (0, 0)
+# I think the blockmap is similar to this grid.
+# Vanilla comment: "Draws flat (floor/ceiling tile) aligned grid lines."
+# See https://github.com/chocolate-doom/chocolate-doom/blob/sdl2-branch/src/doom/am_map.c#L1100
+#
+def draw_grid(draw, LT, color):
+    # --- Draw vertical gridlines ---
+    start = LT.left
+    # if (start - bmaporgx) % 128:
+    #     start += 128 - ((start-bmaporgx) % 128)
+    end = LT.right
+    for x in range(start, end, 128):
+        (A_px, A_py) = LT.MapToScreen(x, LT.bottom)
+        (B_px, B_py) = LT.MapToScreen(x, LT.top)
+        draw.line((A_px, A_py, B_px, B_py), fill = color)
+
+    # --- Draw horizontal gridlines ---
+    start = LT.bottom
+    end = LT.top
+    for x in range(start, end, 128):
+        (A_px, A_py) = LT.MapToScreen(LT.left, x)
+        (B_px, B_py) = LT.MapToScreen(LT.right, x)
+        draw.line((A_px, A_py, B_px, B_py), fill = color)
+
+#
 # A level must be contained within a 16384-unit radius as measured from its center point.
 # Point A is the top-left corner.
 #
@@ -168,12 +193,12 @@ def draw_axis(draw, LT, color):
 # D                   F   B-E gap is 163/4 map units
 #
 def draw_scale(draw, LT, color):
-    (A_px, A_py) = LT.MapToScreen(LT.left, LT.top)
-    (B_px, B_py) = LT.MapToScreen(LT.left+163, LT.top)
-    (C_px, C_py) = LT.MapToScreen(LT.left+327, LT.top)
-    (D_px, D_py) = LT.MapToScreen(LT.left, LT.top-163/2)
-    (E_px, E_py) = LT.MapToScreen(LT.left+163, LT.top-163/4)
-    (F_px, F_py) = LT.MapToScreen(LT.left+327, LT.top-163/2)
+    (A_px, A_py) = LT.MapToScreen(LT.right-256, LT.top)
+    (B_px, B_py) = LT.MapToScreen(LT.right-128, LT.top)
+    (C_px, C_py) = LT.MapToScreen(LT.right, LT.top)
+    (D_px, D_py) = LT.MapToScreen(LT.right-256, LT.top-128/2)
+    (E_px, E_py) = LT.MapToScreen(LT.right-128, LT.top-128/4)
+    (F_px, F_py) = LT.MapToScreen(LT.right, LT.top-128/2)
 
     draw.line((A_px, A_py, C_px, C_py), fill = color) # A -> C
     draw.line((A_px, A_py, D_px, D_py), fill = color) # A -> D
@@ -230,10 +255,11 @@ def drawmap_fit(wad, map_name, filename, format, map_type, px_size, py_size, csc
     draw = ImageDraw.Draw(im)
 
     # --- Draw XY axis ---
+    # draw_grid(draw, LT, (100, 100, 100))
     # draw_axis(draw, LT, (200, 200, 200))
 
     # --- Draw map scale ---
-    draw_scale(draw, LT, (150, 150, 150))
+    draw_scale(draw, LT, (256, 256, 256))
 
     # --- Draw map ---
     if map_type == MAP_LINEDEFS:
@@ -435,7 +461,7 @@ for name in inwad.maps.find(pattern):
     # drawmap_fit(inwad, name, fn_prefix + '_Line_A' + fn_sufix, format, MAP_LINEDEFS, 1920, 1080, CDoomWorld)
     drawmap_fit(inwad, name, fn_prefix + '_Line_B' + fn_sufix, format, MAP_LINEDEFS, 1920, 1080, CClassic)
     # drawmap_fit(inwad, name, fn_prefix + '_Ver_A' + fn_sufix, format, MAP_VERTEXES, 1920, 1080, CDoomWorld)
-    drawmap_fit(inwad, name, fn_prefix + '_Ver_B' + fn_sufix, format, MAP_VERTEXES, 1920, 1080, CClassic)
+    # drawmap_fit(inwad, name, fn_prefix + '_Ver_B' + fn_sufix, format, MAP_VERTEXES, 1920, 1080, CClassic)
     # drawmap_fit(inwad, name, fn_prefix + '_Sec_A' + fn_sufix, format, MAP_SECTORS, 1920, 1080, CDoomWorld)
     # drawmap_fit(inwad, name, fn_prefix + '_Sec_B' + fn_sufix, format, MAP_SECTORS, 1920, 1080, CClassic)
     # drawmap_fit(inwad, name, fn_prefix + '_Nodes_A' + fn_sufix, format, MAP_NODES, 1920, 1080, CDoomWorld)
