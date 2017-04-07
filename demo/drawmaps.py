@@ -22,6 +22,7 @@ import sys
 import os
 import getopt
 import pprint
+import math
 from PIL import Image, ImageDraw
 
 # --- Add OMG module to Python path ---
@@ -180,12 +181,35 @@ def draw_scale(draw, LT, color):
     draw.line((C_px, C_py, F_px, F_py), fill = color) # C -> F
 
 #
-# In the future draw a triangle like Vanilla Doom
+# Draw a triangle with same size as in Vanilla Doom
 # https://github.com/chocolate-doom/chocolate-doom/blob/sdl2-branch/src/doom/am_map.c#L186
 # https://github.com/chocolate-doom/chocolate-doom/blob/sdl2-branch/src/doom/am_map.c#L1314
-RADIUS = 4
-def draw_thing(draw, map_x, map_y, angle, color):
-    draw.ellipse((p1x-RADIUS, p1y-RADIUS, p1x+RADIUS, p1y+RADIUS), outline = color)
+#
+thintriangle_guy = [
+    [[-8, -11.2], [16,   0.0]],
+    [[16,   0.0], [-8,  11.2]],
+    [[-8,  11.2], [-8, -11.2]]
+]
+
+def draw_thing(draw, LT, map_x, map_y, angle, color):
+    angle_rad = math.radians(angle)
+    for line in thintriangle_guy:
+        # -- Rotate ---
+        rot_a_x = line[0][0] * math.cos(angle_rad) - line[0][1] * math.sin(angle_rad)
+        rot_a_y = line[0][0] * math.sin(angle_rad) + line[0][1] * math.cos(angle_rad)
+        rot_b_x = line[1][0] * math.cos(angle_rad) - line[1][1] * math.sin(angle_rad)
+        rot_b_y = line[1][0] * math.sin(angle_rad) + line[1][1] * math.cos(angle_rad)
+
+        # --- Translate to thing coordinates on map ---
+        A_x = rot_a_x + map_x
+        A_y = rot_a_y + map_y
+        B_x = rot_b_x + map_x
+        B_y = rot_b_y + map_y
+
+        # --- Draw line ---
+        (A_px, A_py) = LT.MapToScreen(A_x, A_y)
+        (B_px, B_py) = LT.MapToScreen(B_x, B_y)
+        draw.line((A_px, A_py, B_px, B_py), fill = (0, 255, 0))
 
 # -------------------------------------------------------------------------------------------------
 # Top level map drawing functions
@@ -267,11 +291,7 @@ def drawmap_fit(wad, map_name, filename, format, map_type, px_size, py_size, csc
 
         # --- Draw things ---
         for thing in edit.things:
-            # In the future use this function
-            # draw_thing(draw, p1x, p1y, thing.angle, cscheme.THING)
-            color = (0, 255, 0)
-            (px, py) = LT.MapToScreen(thing.x, thing.y)
-            # draw.ellipse((px-RADIUS, py-RADIUS, px+RADIUS, py+RADIUS), outline = color)
+            draw_thing(draw, LT, thing.x, thing.y, thing.angle, cscheme.THING)
 
     elif map_type == MAP_VERTEXES:
         # --- Draw lines ---
