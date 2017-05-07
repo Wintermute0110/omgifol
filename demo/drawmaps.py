@@ -49,10 +49,10 @@ MAP_VERTEXES = 400
 # -------------------------------------------------------------------------------------------------
 class LinearTransform:
     def __init__(self, left, right, bottom, top, px_size, py_size, border):
-        self.left   = left
-        self.right  = right
-        self.bottom = bottom
-        self.top    = top
+        self.left    = left
+        self.right   = right
+        self.bottom  = bottom
+        self.top     = top
         self.x_size  = right - left
         self.y_size  = top - bottom
         # --- Shift map in x or y direction ---
@@ -101,13 +101,13 @@ class LinearTransform:
         screen_x = self.scale * (+map_x - self.left) + self.xoffset
         screen_y = self.scale * (-map_y + self.top)  + self.yoffset
 
-        return (screen_x, screen_y)
+        return (int(screen_x), int(screen_y))
 
     def ScreenToMap(self, screen_x, screen_y):
         map_x = +(screen_x - self.xoffset + self.scale * self.left) / self.scale
         map_y = -(screen_y - self.yoffset - self.scale * self.top) / self.scale
 
-        return (map_x, map_y)
+        return (int(map_x), int(map_y))
 
 # See https://github.com/chocolate-doom/chocolate-doom/blob/sdl2-branch/src/doom/am_map.c
 class ColorScheme:
@@ -139,6 +139,13 @@ CClassic = ColorScheme(
     (255, 255, 0),   # CD_WALL yellow
     (220, 130, 50),  # THING green
 )
+
+sector_colours = [
+    (255, 0, 0),
+    (0, 255, 0),
+    (0, 0, 255),
+]
+num_sector_colours = len(sector_colours)
 
 # -------------------------------------------------------------------------------------------------
 # Drawing utility functions
@@ -342,18 +349,84 @@ def drawmap_fit(wad, map_name, filename, format, map_type, px_size, py_size, csc
             draw.rectangle((p1x-SIZE, p1y-SIZE, p1x+SIZE, p1y+SIZE), fill = color)
 
     elif map_type == MAP_SECTORS:
-        # In the future draw the floor textures of each sector, like the map in PrBoom+ when using
-        # OpenGL renderer.
-        # --- Draw linedefs ---
-        for line in edit.linedefs:
-            p1x = scale * (edit.vertexes[line.vx_a].x - mapBBox.left)   + xoffset
-            p1y = scale * (edit.vertexes[line.vx_a].y - mapBBox.bottom) + yoffset
-            p2x = scale * (edit.vertexes[line.vx_b].x - mapBBox.left)   + xoffset
-            p2y = scale * (edit.vertexes[line.vx_b].y - mapBBox.bottom) + yoffset
-            color = cscheme.WALL
-            draw_line(draw, p1x, p1y, p2x, p2y, color)
+        # Approach A: paint each sector surface with a different colour. Colours will be picked
+        #             sequentially from a list.
+        # Approach B: paint the floor texture of each sector, aligned to the 64x64 grid.
+
+        # --- Make a list of sectors. Each sector has a list of linedef numbers ---
+        num_linedefs = len(edit.linedefs)
+        num_sidedefs = len(edit.sidedefs)
+        num_sectors = len(edit.sectors)
+        print('Map has {0} linedefs'.format(num_linedefs))
+        print('Map has {0} sidedefs'.format(num_sidedefs))
+        print('Map has {0} sectors'.format(num_sectors))
+        sector_list = [list() for _ in range(num_sectors)]
+        for i in range(num_linedefs):
+            line = edit.linedefs[i]
+            # print(vars(line))
+            front = line.front
+            back  = line.back
+            front_sector = edit.sidedefs[front].sector
+            sector_list[front_sector].append(i)
+            if back > 0:
+                back_sector = edit.sidedefs[back].sector
+                sector_list[back_sector].append(i)
+        for i in range(num_sectors):
+            print('Sector {0:4d} -> {1}'.format(i, sector_list[i]))
+
+        # --- Draw sectors ---
+        for i in range(num_sectors):
+        # for i in [4]:
+            sector = sector_list[i]
+            print('Processing sector {0} ...'.format(i))
+
+            # --- Get sector bouding box ---
+            s_left  = s_bottom = 100000
+            s_right = s_top    = -100000
+            sector_cord_list = []
+            for linedef_num in sector:
+                line = edit.linedefs[linedef_num]
+                x_cord = edit.vertexes[line.vx_a].x
+                y_cord = edit.vertexes[line.vx_a].y
+                if x_cord < s_left:   s_left   = x_cord
+                if x_cord > s_right:  s_right  = x_cord
+                if y_cord < s_bottom: s_bottom = y_cord
+                if y_cord > s_top:    s_top    = y_cord
+                sector_cord_list.append((x_cord, y_cord))
+            s_xsize = s_right - s_left
+            s_ysize = s_top - s_bottom
+            print('left {0} | right {1} | bottom {2} | top {3}'.format(s_left, s_right, s_bottom, s_top))
+            print('xsize {0} | ysize {1}'.format(s_xsize, s_ysize))
+
+            # --- Transform sector coordinates to unscaled pixels ---
+            s_pos_vector = LT.MapToScreen(s_left, s_top)
+            s_screen_xsize = s_xsize * LT.scale
+            s_screen_ysize = s_ysize * LT.scale
+            s_LT = LinearTransform(s_left, s_right, s_bottom, s_top, s_screen_xsize, s_screen_ysize, 0)
+            sector_pixel_cord_list = []
+            for t in sector_cord_list:
+                sector_pixel_cord_list.append(s_LT.MapToScreen(t[0], t[1]))
+            print(s_pos_vector)
+            print(sector_cord_list)
+            print(sector_pixel_cord_list)
+
+            # --- Create a sector square image ---
+            # http://stackoverflow.com/questions/3119999/drawing-semi-transparent-polygons-in-pil
+            s_poly = Image.new('RGB', (s_xsize, s_ysize))
+            poly_draw = ImageDraw.Draw(s_poly)
+            colour_index = i % num_sector_colours
+            poly_draw.polygon(sector_pixel_cord_list, fill = sector_colours[colour_index], outline = sector_colours[colour_index])
+            del poly_draw
+            s_poly.save('temp.png', 'PNG')
+
+            # s_back = Image.new('RGB', (s_xsize, s_ysize), (255, 0, 0))
+            # s_back.paste(s_poly, mask = s_poly)
+            im.paste(s_poly, box = s_pos_vector)
+            
 
     elif map_type == MAP_NODES:
+        # NOTE The implicit lines of the subsectors are the partition lines of the nodes.
+        #
         # --- Draw segs and ssectors ---
         # NOT WORKING AT THE MOMENT!
         # Segs are only defined on linedefs and have implicit edges. I don't know how to
@@ -463,7 +536,7 @@ for name in inwad.maps.find(pattern):
     # drawmap_fit(inwad, name, fn_prefix + '_Ver_A' + fn_sufix, format, MAP_VERTEXES, 1920, 1080, CDoomWorld)
     # drawmap_fit(inwad, name, fn_prefix + '_Ver_B' + fn_sufix, format, MAP_VERTEXES, 1920, 1080, CClassic)
     # drawmap_fit(inwad, name, fn_prefix + '_Sec_A' + fn_sufix, format, MAP_SECTORS, 1920, 1080, CDoomWorld)
-    # drawmap_fit(inwad, name, fn_prefix + '_Sec_B' + fn_sufix, format, MAP_SECTORS, 1920, 1080, CClassic)
+    drawmap_fit(inwad, name, fn_prefix + '_Sec_B' + fn_sufix, format, MAP_SECTORS, 1920, 1080, CClassic)
     # drawmap_fit(inwad, name, fn_prefix + '_Nodes_A' + fn_sufix, format, MAP_NODES, 1920, 1080, CDoomWorld)
     # drawmap_fit(inwad, name, fn_prefix + '_Nodes_B' + fn_sufix, format, MAP_NODES, 1920, 1080, CClassic)
 sys.exit(0)
